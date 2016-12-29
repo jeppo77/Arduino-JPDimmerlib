@@ -6,7 +6,8 @@
 JPDimmerLib::JPDimmerLib(uint8_t stepspercycle, uint8_t amountoflamps,
                          int zerocrossing_interruptpin, void (*synccall_)(const boolean),
                          uint8_t minimumbrightness, uint16_t zerocrossingoffset,
-                         uint8_t stepsaftertimerdisable, uint8_t stepsneededforsync, double tu_, double ku_) :
+                         uint8_t stepsaftertimerdisable, uint8_t stepsneededforsync, double tu_, double ku_,
+                         float gamma) :
 
         STEPS_PER_CYCLE(stepspercycle),
         AMOUNT_OF_LAMPS(amountoflamps),
@@ -16,7 +17,8 @@ JPDimmerLib::JPDimmerLib(uint8_t stepspercycle, uint8_t amountoflamps,
         STEPS_AFTER_TIMER_DISABLE(stepsaftertimerdisable),
         STEPS_NEEDED_FOR_SYNC(stepsneededforsync),
         tu(tu_), ku(ku_), kp(ku_ * 0.3), ki(2 * kp / tu_), kd(kp * tu_ / 8),
-        minimum_brightness(minimumbrightness)
+        margin(AC_PERIOD / ((int32_t)STEPS_PER_CYCLE))//,
+//        minimum_brightness(minimumbrightness)
 
 //minimum_brightness((uint8_t)((zerocrossingoffset * (int32_t)stepspercycle) / AC_PERIOD))
 
@@ -71,6 +73,13 @@ JPDimmerLib::JPDimmerLib(uint8_t stepspercycle, uint8_t amountoflamps,
 
         burninglampoverview = 0;
         fadingoverview = 0;
+
+        gammatable[0] = 0;
+        for (int i = 0; i < 100; i++)
+        {
+                gammatable[i+1] = (uint8_t)(pow((float)i/99.0,gamma) * (STEPS_PER_CYCLE - 1 - minimumbrightness) + 0.5 + minimumbrightness);
+        }
+
 }
 
 uint8_t JPDimmerLib::getrequestedbrightness(uint8_t lampnumber)
@@ -164,7 +173,8 @@ void JPDimmerLib::phasecorrection()
 
         timedifference_d = timedifference;
 
-        if (!(timedifference > (AC_PERIOD / ((int32_t)STEPS_PER_CYCLE * 1)) || timedifference < -(AC_PERIOD / ((int32_t)STEPS_PER_CYCLE * 1))))
+        //        if (!(timedifference > (AC_PERIOD / ((int32_t)STEPS_PER_CYCLE * 1)) || timedifference < -(AC_PERIOD / ((int32_t)STEPS_PER_CYCLE * 1))))
+        if (timedifference < margin && timedifference > -margin)
         {
                 if (synclevel)
                 {
@@ -226,7 +236,7 @@ void JPDimmerLib::loop()
 
 boolean JPDimmerLib::requestbrightness(uint8_t lampnumber, uint8_t brightness) // this can fail (returns false then)!!
 {
-        int convertedbrightness;
+        uint8_t convertedbrightness;
 
         if (lamps[lampnumber].addresstoclear)
         {
@@ -238,11 +248,13 @@ boolean JPDimmerLib::requestbrightness(uint8_t lampnumber, uint8_t brightness) /
         {
                 if (brightness != lamps[lampnumber].brightness)
                 {
-                        if (brightness > minimum_brightness)
+                        /*
+                           if (brightness > minimum_brightness)
                                 convertedbrightness = brightness * (STEPS_PER_CYCLE - 1) / 100;
-                        else
+                           else
                                 convertedbrightness = 0;
-
+                         */
+                        convertedbrightness = gammatable[brightness];
                         if (convertedbrightness != lamps[lampnumber].setting)
                         {
 
@@ -292,21 +304,25 @@ void JPDimmerLib::fadeto(uint8_t lampnumber, uint8_t brightness, uint16_t steps,
                 if (!brightness)
                         lamps[lampnumber].lastbrightness = lamps[lampnumber].brightness;
 
-                lamps[lampnumber].fadesteps = steps;
-
                 lamps[lampnumber].requested_brightness = brightness;
 
-                lamps[lampnumber].start_brightness = lamps[lampnumber].brightness;
+                if (brightness != lamps[lampnumber].brightness)
+                {
+                        lamps[lampnumber].fadesteps = steps;
+                        lamps[lampnumber].start_brightness = lamps[lampnumber].brightness;
 
-                // calculate the width of each step
-                lamps[lampnumber].step = ((int32_t)(brightness - lamps[lampnumber].brightness) << 8) / steps;
+                        // calculate the width of each step
+                        lamps[lampnumber].step = ((int32_t)(brightness - lamps[lampnumber].brightness) << 8) / steps;
 
-                lamps[lampnumber].lastfadestep = 0;
-                lamps[lampnumber].fading = true;
-                fadingoverview |= (1<<lampnumber);
-                lamps[lampnumber].fadedelay = duration / steps;
-                lamps[lampnumber].fadestarttime = millis() + startdelay;
-                lamps[lampnumber].fadelastsyncchecktime = millis();
+                        lamps[lampnumber].lastfadestep = 0;
+                        lamps[lampnumber].fading = true;
+                        fadingoverview |= (1<<lampnumber);
+                        lamps[lampnumber].fadedelay = duration / steps;
+                        lamps[lampnumber].fadestarttime = millis() + startdelay;
+                        lamps[lampnumber].fadelastsyncchecktime = millis();
+                }
+                else
+                        lamps[lampnumber].fading = false;
         }
 }
 

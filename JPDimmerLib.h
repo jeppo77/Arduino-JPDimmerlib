@@ -18,7 +18,7 @@ public:
         JPDimmerLib(uint8_t stepspercycle, uint8_t amountoflamps, int zerocrossing_interruptpin, void (*synccall_)(const boolean),
                     uint8_t minimumbrightness = 19, uint16_t zerocrossingoffset = 1800,
                     uint8_t stepsaftertimerdisable = 10, uint8_t stepsneededforsync = 20,
-                    double tu_ = 1, double ku_ = 0.06);
+                    double tu_ = 1, double ku_ = 0.06, float gamma = 1);
 
         void lampinit(uint8_t lampnumber, int pin);
 
@@ -107,18 +107,18 @@ private:
         const double ki;
         const double kd;
 
-        const uint8_t minimum_brightness;
-
         uint32_t burninglampoverview;
         uint32_t fadingoverview;
 
         int32_t timedifference, timedifference_d;
         double integrator, error, derivative;
+        const int32_t margin;
         uint8_t crossed;
         uint8_t synclevel;
         boolean insync;
         void (*synccall)(const boolean);
 
+//        const uint8_t minimum_brightness;
 
         typedef struct
         {
@@ -140,6 +140,8 @@ private:
                 int32_t step;
                 uint8_t addresstoclear;
         } lamp;
+
+        uint8_t gammatable[101]; // input brightness is 0..100 so 101 entries for gamma
 
         lamp *lamps;
 
